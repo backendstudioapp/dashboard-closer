@@ -866,7 +866,8 @@ const ESTADO_COLORS = {
   'Realizada': '#057a55',       // verde
   'No show closer': '#c81e1e',  // roja
   'No show lead': '#000000',    // negro
-  'Cancelada': '#f87171'        // rojo claro
+  'Cancelada': '#f87171',       // rojo claro
+  'En curso': '#3b82f6'         // azul claro
 };
 
 function getColor(label, fallbackIndex) {
@@ -878,6 +879,7 @@ function getColor(label, fallbackIndex) {
   if (lLow === 'no show closer') return ESTADO_COLORS['No show closer'];
   if (lLow === 'cancelada') return ESTADO_COLORS['Cancelada'];
   if (lLow === 'realizada') return ESTADO_COLORS['Realizada'];
+  if (lLow === 'en curso') return ESTADO_COLORS['En curso'];
   return PAL[fallbackIndex % PAL.length];
 }
 
