@@ -582,18 +582,14 @@ main { padding: 24px 28px; max-width: 1600px; margin: 0 auto; }
       </div>
       <div class="kpi-grid" id="kpi-pipeline"></div>
     </div>
-    <div class="grid-3">
+    <div class="grid-2">
       <div class="card">
-        <div class="card-title">Estados de Eventos</div>
-        <div id="chart-estados-ev"></div>
+        <div class="card-title">Estados de Eventos <span class="card-title-sub">(Total Agendadas)</span></div>
+        <div id="chart-estados-total"></div>
       </div>
       <div class="card">
-        <div class="card-title">Show vs No Show <span class="card-title-sub">(leads)</span></div>
-        <div id="chart-show"></div>
-      </div>
-      <div class="card">
-        <div class="card-title">Triaje vs Venta</div>
-        <div id="chart-triaje"></div>
+        <div class="card-title">Estados de Eventos <span class="card-title-sub">(Agendadas Cualificadas)</span></div>
+        <div id="chart-estados-cualif"></div>
       </div>
     </div>
     <div class="grid-2">
@@ -1260,9 +1256,7 @@ function renderScores() {
 // ═══════════════════════════════════════════════════════════════
 function renderPipeline() {
   renderPipelineKPIs();
-  renderChartEstadosEv();
-  renderChartShow();
-  renderChartTriaje();
+  renderChartEstados();
   renderTrendDay();
   renderNoShowsDetail();
 }
@@ -1283,20 +1277,9 @@ function renderPipelineKPIs() {
   const durs      = inf.map(r=>toNum(r.duracion)).filter(n=>n>0);
   const durMedia  = avg(durs).toFixed(1);
 
-  // Alert: No show closer > 10%
-  const noShowCloserPct = ev.length ? (noShowClos.length/ev.length*100) : 0;
-  const noShowCloserAlert = noShowCloserPct > 10;
-  const noShowCloserHTML = noShowCloserAlert
-    ? `<span class="alert-warn-badge"><span class="warn-icon">⚠️</span>${fmt(noShowClos.length)}</span>`
-    : fmt(noShowClos.length);
-
   const kpis=[
     { label:'Llamadas Agendadas', value:fmt(ev.length), sub:'Total de eventos en agenda', icon:'📅', color:'var(--purple)' },
     { label:'Agendadas Cualificadas', value:fmt(cualif.length), sub:pct(cualif.length,ev.length)+' del total agendado', icon:'🎯', color:'var(--accent)' },
-    { label:'Llamadas Realizadas', value:fmt(realizadas.length), sub:pct(realizadas.length,ev.length)+' del total agendado', icon:'📞', color:'var(--green)' },
-    { label:'No Show — Lead', value:fmt(noShowLead.length), sub:pct(noShowLead.length,ev.length)+' no asistieron', icon:'❌', color:'var(--red)' },
-    { label:'No Show — Closer', value:noShowCloserHTML, sub:pct(noShowClos.length,ev.length)+' fallo del closer', icon:'⚠️', color: noShowCloserAlert ? 'var(--red)' : 'var(--orange)', raw:true },
-    { label:'Canceladas', value:fmt(canceladas.length), sub:pct(canceladas.length,ev.length)+' del total', icon:'🚫', color:'var(--muted)' },
     { label:'Tasa Cierre / Atendida', value:tasaAte+'%', sub:`${ventas} ventas / ${realizadas.length} atendidas`, icon:'🏆', color:'var(--green)' },
     { label:'Tasa Cierre / Cualificada', value:tasaAge+'%', sub:`${ventas} ventas / ${cualif.length} cualificadas`, icon:'📈', color:'var(--accent)' },
     { label:'Duración Media', value:durMedia+' min', sub:'Por llamada analizada', icon:'⏱️', color:'var(--purple)' },
@@ -1313,32 +1296,22 @@ function renderPipelineKPIs() {
     </div>`).join('');
 }
 
-function renderChartEstadosEv() {
-  const c=counter(F.eventos,'estado');
-  const order=['Realizada','En curso','Cancelada','No show lead','No show closer'];
-  const data=order.filter(k=>c[k]).map(k=>({label:k,val:c[k]}));
-  donut('chart-estados-ev',data);
-}
-
-function renderChartShow() {
-  const ev=F.eventos;
-  const show=ev.filter(r=>r.estado&&r.estado!=='No show lead').length;
-  const noShow=ev.filter(r=>r.estado==='No show lead').length;
-  donut('chart-show',[
-    {label:'Show (asiste)',val:show},
-    {label:'No Show',val:noShow}
-  ]);
-}
-
-function renderChartTriaje() {
-  // Triaje = eventos with "triaje" in tipo, Venta = rest or "venta"
+function renderChartEstados() {
   const ev = F.eventos;
-  const triaje = ev.filter(r=>(r.tipo||'').toLowerCase().includes('triaje')).length;
-  const venta  = ev.filter(r=>(r.tipo||'').toLowerCase().includes('venta')).length;
-  const other  = ev.length - triaje - venta;
-  const data = [{label:'Triaje',val:triaje},{label:'Venta',val:venta}];
-  if (other > 0) data.push({label:'Otros',val:other});
-  donut('chart-triaje', data);
+  const cualif = ev.filter(r=>isQualified(r.telefono));
+
+  const cTotal = counter(ev, 'estado');
+  const cCualif = counter(cualif, 'estado');
+
+  const order=['Realizada','En curso','Cancelada','No show lead','No show closer'];
+
+  const dataTotal = order.filter(k=>cTotal[k]).map(k=>({label:k,val:cTotal[k]}));
+  if(!dataTotal.length) document.getElementById('chart-estados-total').innerHTML='<p style="color:var(--muted);font-size:12px">Sin datos</p>';
+  else donut('chart-estados-total', dataTotal);
+
+  const dataCualif = order.filter(k=>cCualif[k]).map(k=>({label:k,val:cCualif[k]}));
+  if(!dataCualif.length) document.getElementById('chart-estados-cualif').innerHTML='<p style="color:var(--muted);font-size:12px">Sin datos</p>';
+  else donut('chart-estados-cualif', dataCualif);
 }
 
 function renderTrendDay() {
