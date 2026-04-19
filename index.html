@@ -532,6 +532,26 @@ main { padding: 24px 28px; max-width: 1600px; margin: 0 auto; }
         <div id="chart-responsabilidad"></div>
       </div>
     </div>
+    <div class="card">
+      <div class="card-title">
+        ⚠️ No Shows del Closer — Detalle
+        <span class="card-title-sub" id="noshow-closer-count"></span>
+      </div>
+      <div style="overflow-x:auto">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Fecha</th>
+              <th>Hora</th>
+              <th>Nombre del Lead</th>
+              <th>Teléfono</th>
+              <th>Closer Asignado</th>
+            </tr>
+          </thead>
+          <tbody id="tbody-noshow-closer"></tbody>
+        </table>
+      </div>
+    </div>
   </div>
 
   <!-- ═══════ TAB 3 — Análisis de Llamadas ═══════ -->
@@ -542,14 +562,18 @@ main { padding: 24px 28px; max-width: 1600px; margin: 0 auto; }
         <div id="chart-objeciones"></div>
       </div>
       <div class="card">
-        <div class="card-title">Tipos de Cierre</div>
-        <div id="chart-tipos-cierre"></div>
+        <div class="card-title">Tipos de Objeción <span class="card-title-sub">(tipo 1 + 2 + 3)</span></div>
+        <div id="chart-tipos-objecion"></div>
       </div>
     </div>
-    <div class="grid-2">
+    <div class="grid-3">
       <div class="card">
-        <div class="card-title">Nivel de Conciencia</div>
-        <div id="chart-conciencia"></div>
+        <div class="card-title">Intensidad de Objeciones</div>
+        <div id="chart-intensidad"></div>
+      </div>
+      <div class="card">
+        <div class="card-title">Gestión de Objeciones</div>
+        <div id="chart-gestion-obj"></div>
       </div>
       <div class="card">
         <div class="card-title">Nivel de Urgencia</div>
@@ -558,17 +582,13 @@ main { padding: 24px 28px; max-width: 1600px; margin: 0 auto; }
     </div>
     <div class="grid-2">
       <div class="card">
-        <div class="card-title">Habilidades a Entrenar</div>
-        <div id="chart-habilidades"></div>
-      </div>
-      <div class="card">
         <div class="card-title">Histograma de Puntuaciones</div>
         <div class="chart-canvas-wrap"><canvas id="canvas-histogram"></canvas></div>
       </div>
-    </div>
-    <div class="card">
-      <div class="card-title">Scores Promedio</div>
-      <div class="score-grid" id="chart-scores"></div>
+      <div class="card">
+        <div class="card-title">Scores Promedio</div>
+        <div class="score-grid" id="chart-scores"></div>
+      </div>
     </div>
   </div>
 
@@ -997,9 +1017,49 @@ function renderCashCloserChart() {
 // ═══════════════════════════════════════════════════════════════
 function renderClosers() {
   renderTablaClosers();
+  renderNoShowCloserList();
   renderRadarScores();
   renderChartPuntualidad();
   renderResponsabilidad();
+}
+
+function renderNoShowCloserList() {
+  const noShows = F.eventos.filter(r => r.estado === 'No show closer');
+  const tbody = document.getElementById('tbody-noshow-closer');
+  const countEl = document.getElementById('noshow-closer-count');
+  countEl.textContent = noShows.length + ' registro' + (noShows.length !== 1 ? 's' : '');
+
+  if (!noShows.length) {
+    tbody.innerHTML = '<tr><td colspan="5" style="color:var(--muted);padding:16px">🎉 Sin no-shows del closer en el periodo seleccionado</td></tr>';
+    return;
+  }
+
+  // Detect field names dynamically (nombre, nombre_lead, lead_name, etc.)
+  const sample = noShows[0];
+  const keys = Object.keys(sample);
+  const nameKey = keys.find(k => /^nombre/i.test(k)) || keys.find(k => /lead.*name|name.*lead/i.test(k)) || 'nombre';
+  const horaKey = keys.find(k => /^hora/i.test(k)) || 'hora';
+
+  // Sort by date descending
+  const sorted = [...noShows].sort((a, b) => {
+    const da = parseDate(a.fecha_llamada), db = parseDate(b.fecha_llamada);
+    return (db || 0) - (da || 0);
+  });
+
+  tbody.innerHTML = sorted.map(r => {
+    const fecha = r.fecha_llamada || '—';
+    const hora = r[horaKey] || '—';
+    const nombre = r[nameKey] || '—';
+    const tel = r.telefono || '—';
+    const closer = r.closer || '—';
+    return `<tr>
+      <td class="td-mono">${fecha}</td>
+      <td class="td-mono">${hora}</td>
+      <td class="td-name">${nombre}</td>
+      <td class="td-mono">${tel}</td>
+      <td><span class="badge badge-red">${closer}</span></td>
+    </tr>`;
+  }).join('');
 }
 
 function renderTablaClosers() {
@@ -1131,10 +1191,10 @@ function renderResponsabilidad() {
 // ═══════════════════════════════════════════════════════════════
 function renderCalls() {
   renderObjeciones();
-  renderTiposCierre();
-  renderConciencia();
+  renderTiposObjecion();
+  renderIntensidadObj();
+  renderGestionObj();
   renderUrgencia();
-  renderHabilidades();
   renderHistogram();
   renderScores();
 }
@@ -1146,18 +1206,32 @@ function renderObjeciones() {
   barChart('chart-objeciones',data);
 }
 
-function renderTiposCierre() {
-  const c=counter(F.informes,'tipo_cierre');
-  const data=Object.entries(c).filter(([k])=>k&&k!=='—'&&k!=='').sort((a,b)=>b[1]-a[1]).map(([label,val])=>({label,val}));
-  if(!data.length){document.getElementById('chart-tipos-cierre').innerHTML='<p style="color:var(--muted);font-size:12px">Sin datos</p>';return;}
-  donut('chart-tipos-cierre',data);
+function renderTiposObjecion() {
+  // Aggregate objecion_tipo_1, objecion_tipo_2, objecion_tipo_3 into a single counter
+  const c={};
+  F.informes.forEach(r => {
+    ['objecion_tipo_1','objecion_tipo_2','objecion_tipo_3'].forEach(key => {
+      const v=(r[key]||'').trim();
+      if(v && v!=='—') c[v]=(c[v]||0)+1;
+    });
+  });
+  const data=Object.entries(c).sort((a,b)=>b[1]-a[1]).map(([label,val])=>({label,val}));
+  if(!data.length){document.getElementById('chart-tipos-objecion').innerHTML='<p style="color:var(--muted);font-size:12px">Sin datos</p>';return;}
+  barChart('chart-tipos-objecion',data);
 }
 
-function renderConciencia() {
-  const c=counter(F.informes,'nivel_conciencia');
+function renderIntensidadObj() {
+  const c=counter(F.informes,'objecion_tipo_intensidad');
   const data=Object.entries(c).filter(([k])=>k&&k!=='—'&&k!=='').sort((a,b)=>b[1]-a[1]).map(([label,val])=>({label,val}));
-  if(!data.length){document.getElementById('chart-conciencia').innerHTML='<p style="color:var(--muted);font-size:12px">Sin datos</p>';return;}
-  donut('chart-conciencia',data);
+  if(!data.length){document.getElementById('chart-intensidad').innerHTML='<p style="color:var(--muted);font-size:12px">Sin datos</p>';return;}
+  donut('chart-intensidad',data);
+}
+
+function renderGestionObj() {
+  const c=counter(F.informes,'objecion_bien_gestionada');
+  const data=Object.entries(c).filter(([k])=>k&&k!=='—'&&k!=='').sort((a,b)=>b[1]-a[1]).map(([label,val])=>({label,val}));
+  if(!data.length){document.getElementById('chart-gestion-obj').innerHTML='<p style="color:var(--muted);font-size:12px">Sin datos</p>';return;}
+  donut('chart-gestion-obj',data);
 }
 
 function renderUrgencia() {
@@ -1165,13 +1239,6 @@ function renderUrgencia() {
   const data=Object.entries(c).filter(([k])=>k&&k!=='—'&&k!=='').sort((a,b)=>b[1]-a[1]).map(([label,val])=>({label,val}));
   if(!data.length){document.getElementById('chart-urgencia').innerHTML='<p style="color:var(--muted);font-size:12px">Sin datos</p>';return;}
   donut('chart-urgencia',data);
-}
-
-function renderHabilidades() {
-  const c=counter(F.informes,'habilidad_a_entrenar');
-  const data=Object.entries(c).filter(([k])=>k&&k!=='—'&&k!=='').sort((a,b)=>b[1]-a[1]).map(([label,val])=>({label,val}));
-  if(!data.length){document.getElementById('chart-habilidades').innerHTML='<p style="color:var(--muted);font-size:12px">Sin datos</p>';return;}
-  barChart('chart-habilidades',data);
 }
 
 function renderHistogram() {
