@@ -1291,7 +1291,8 @@ function renderPipelineKPIs() {
     : fmt(noShowClos.length);
 
   const kpis=[
-    { label:'Leads Cualificados', value:fmt(cualif.length), sub:'Prefijo EU / MX / USA / CA', icon:'🎯', color:'var(--accent)' },
+    { label:'Llamadas Agendadas', value:fmt(ev.length), sub:'Total de eventos en agenda', icon:'📅', color:'var(--purple)' },
+    { label:'Agendadas Cualificadas', value:fmt(cualif.length), sub:pct(cualif.length,ev.length)+' del total agendado', icon:'🎯', color:'var(--accent)' },
     { label:'Llamadas Realizadas', value:fmt(realizadas.length), sub:pct(realizadas.length,ev.length)+' del total agendado', icon:'📞', color:'var(--green)' },
     { label:'No Show — Lead', value:fmt(noShowLead.length), sub:pct(noShowLead.length,ev.length)+' no asistieron', icon:'❌', color:'var(--red)' },
     { label:'No Show — Closer', value:noShowCloserHTML, sub:pct(noShowClos.length,ev.length)+' fallo del closer', icon:'⚠️', color: noShowCloserAlert ? 'var(--red)' : 'var(--orange)', raw:true },
