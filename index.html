@@ -4,7 +4,9 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Closer Analytics Dashboard</title>
+<meta name="description" content="Dashboard de analítica comercial para closers — facturación, cash collected, performance, pipeline y análisis de llamadas.">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 <style>
 :root {
   --bg: #f0f2f5;
@@ -46,10 +48,12 @@ header {
   background: var(--surface);
   border-bottom: 1px solid var(--border);
   padding: 0 28px;
-  height: 56px;
-  display: flex; align-items: center; justify-content: space-between;
   position: sticky; top: 0; z-index: 100;
   box-shadow: var(--shadow);
+}
+.header-top {
+  height: 56px;
+  display: flex; align-items: center; justify-content: space-between;
 }
 .logo { display: flex; align-items: center; gap: 10px; }
 .logo-icon {
@@ -80,6 +84,36 @@ header {
 .btn-secondary { background: var(--surface2); color: var(--text2); border: 1px solid var(--border); }
 .btn-secondary:hover { background: var(--border); }
 
+/* TABS */
+.tab-bar {
+  display: flex; gap: 0; border-top: 1px solid var(--border);
+  margin: 0 -28px; padding: 0 28px;
+}
+.tab-btn {
+  font-family: 'Inter', sans-serif;
+  font-size: 13px; font-weight: 500;
+  color: var(--muted);
+  background: none; border: none;
+  padding: 10px 18px;
+  cursor: pointer;
+  position: relative;
+  transition: color 0.2s;
+  white-space: nowrap;
+}
+.tab-btn:hover { color: var(--text2); }
+.tab-btn.active {
+  color: var(--accent);
+  font-weight: 600;
+}
+.tab-btn.active::after {
+  content: '';
+  position: absolute;
+  bottom: 0; left: 0; right: 0;
+  height: 2px;
+  background: var(--accent);
+  border-radius: 2px 2px 0 0;
+}
+
 /* FILTERS */
 .filters {
   background: var(--surface);
@@ -104,7 +138,21 @@ select:focus, input[type=date]:focus {
 .sep { width: 1px; height: 20px; background: var(--border2); }
 
 /* MAIN */
-main { padding: 24px 28px; max-width: 1600px; margin: 0 auto; display: flex; flex-direction: column; gap: 28px; }
+main { padding: 24px 28px; max-width: 1600px; margin: 0 auto; }
+
+/* TAB PANELS */
+.tab-panel {
+  display: none;
+  flex-direction: column; gap: 28px;
+  animation: fadeIn 0.25s ease;
+}
+.tab-panel.active {
+  display: flex;
+}
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
 
 /* SECTION */
 .section-header { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
@@ -225,6 +273,14 @@ main { padding: 24px 28px; max-width: 1600px; margin: 0 auto; display: flex; fle
 .score-fill { height: 100%; border-radius: 3px; transition: width 0.8s ease; }
 .score-val { font-family: 'IBM Plex Mono', monospace; font-size: 12px; font-weight: 500; min-width: 28px; text-align: right; }
 
+/* ALERT (no-show closer) */
+.alert-warn-badge {
+  color: var(--red); font-weight: 700;
+}
+.alert-warn-badge .warn-icon {
+  font-size: 16px; margin-right: 4px; vertical-align: middle;
+}
+
 /* LOADING */
 #loading-screen {
   position: fixed; inset: 0; z-index: 9999;
@@ -240,6 +296,22 @@ main { padding: 24px 28px; max-width: 1600px; margin: 0 auto; display: flex; fle
 
 #dashboard { display: none; }
 
+/* SPINNER OVERLAY (for refresh) */
+.spinner-overlay {
+  position: fixed; inset: 0; z-index: 9998;
+  background: rgba(240,242,245,0.65);
+  backdrop-filter: blur(2px);
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px;
+}
+.spinner-ring {
+  width: 36px; height: 36px;
+  border: 3px solid var(--border);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
 /* ERROR */
 .alert-error {
   background: var(--red-light); border: 1px solid #fbd5d5;
@@ -250,10 +322,17 @@ main { padding: 24px 28px; max-width: 1600px; margin: 0 auto; display: flex; fle
 /* Divider */
 .divider { height: 1px; background: var(--border); margin: 4px 0; }
 
+/* Chart canvas wrapper */
+.chart-canvas-wrap { position: relative; width: 100%; max-height: 320px; }
+.chart-canvas-wrap canvas { width: 100% !important; }
+
 @media (max-width: 600px) {
-  header, .filters, main { padding-left: 16px; padding-right: 16px; }
+  header { padding-left: 16px; padding-right: 16px; }
+  .filters, main { padding-left: 16px; padding-right: 16px; }
   .kpi-value { font-size: 20px; }
   .score-grid { grid-template-columns: 1fr; }
+  .tab-btn { padding: 10px 10px; font-size: 12px; }
+  .tab-bar { margin: 0 -16px; padding: 0 16px; overflow-x: auto; }
 }
 </style>
 </head>
@@ -267,169 +346,290 @@ main { padding: 24px 28px; max-width: 1600px; margin: 0 auto; display: flex; fle
 
 <div id="dashboard">
 <header>
-  <div class="logo">
-    <div class="logo-icon">
-      <svg viewBox="0 0 24 24"><path d="M3 13h8V3H3v10zm0 8h8v-6H3v6zm10 0h8V11h-8v10zm0-18v6h8V3h-8z"/></svg>
+  <div class="header-top">
+    <div class="logo">
+      <div class="logo-icon">
+        <svg viewBox="0 0 24 24"><path d="M3 13h8V3H3v10zm0 8h8v-6H3v6zm10 0h8V11h-8v10zm0-18v6h8V3h-8z"/></svg>
+      </div>
+      <span class="logo-name">Closer <span>Analytics</span></span>
     </div>
-    <span class="logo-name">Closer <span>Analytics</span></span>
+    <div class="header-right">
+      <div class="last-update" id="last-update">—</div>
+      <button class="btn btn-primary" id="btn-refresh" onclick="loadData()">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5"><path d="M1 4v6h6M23 20v-6h-6"/><path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15"/></svg>
+        Actualizar
+      </button>
+    </div>
   </div>
-  <div class="header-right">
-    <div class="last-update" id="last-update">—</div>
-    <button class="btn btn-primary" id="btn-refresh" onclick="loadData()">
-      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5"><path d="M1 4v6h6M23 20v-6h-6"/><path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15"/></svg>
-      Actualizar
-    </button>
-  </div>
+  <nav class="tab-bar" id="tab-bar">
+    <button class="tab-btn active" data-tab="tab-overview" onclick="switchTab('tab-overview',this)">📊 Visión General</button>
+    <button class="tab-btn" data-tab="tab-closers" onclick="switchTab('tab-closers',this)">🏆 Performance Closers</button>
+    <button class="tab-btn" data-tab="tab-calls" onclick="switchTab('tab-calls',this)">📞 Análisis de Llamadas</button>
+    <button class="tab-btn" data-tab="tab-pipeline" onclick="switchTab('tab-pipeline',this)">📋 Pipeline / Agenda</button>
+  </nav>
 </header>
 
-<div class="filters">
+<!-- ═══════════ FILTER BARS (one per tab) ═══════════ -->
+<div class="filters" id="filters-overview">
   <div class="filter-group">
     <span class="filter-label">Desde</span>
-    <input type="date" id="f-from">
+    <input type="date" id="fo-from">
   </div>
   <div class="filter-group">
     <span class="filter-label">Hasta</span>
-    <input type="date" id="f-to">
+    <input type="date" id="fo-to">
   </div>
   <div class="sep"></div>
   <div class="filter-group">
     <span class="filter-label">Closer</span>
-    <select id="f-closer"><option value="">Todos</option></select>
+    <select id="fo-closer"><option value="">Todos</option></select>
   </div>
   <div class="filter-group">
     <span class="filter-label">País</span>
-    <select id="f-pais"><option value="">Todos</option></select>
-  </div>
-  <div class="filter-group">
-    <span class="filter-label">Estado venta</span>
-    <select id="f-estado"><option value="">Todos</option></select>
+    <select id="fo-pais"><option value="">Todos</option></select>
   </div>
   <div class="sep"></div>
-  <button class="btn btn-primary" onclick="applyFilters()" style="font-size:12px;padding:6px 14px">Aplicar</button>
-  <button class="btn btn-secondary" onclick="resetFilters()" style="font-size:12px;padding:6px 14px">Limpiar</button>
+  <button class="btn btn-primary" onclick="applyTabFilters()" style="font-size:12px;padding:6px 14px">Aplicar</button>
+  <button class="btn btn-secondary" onclick="resetTabFilters()" style="font-size:12px;padding:6px 14px">Limpiar</button>
+</div>
+
+<div class="filters" id="filters-closers" style="display:none">
+  <div class="filter-group">
+    <span class="filter-label">Desde</span>
+    <input type="date" id="fc-from">
+  </div>
+  <div class="filter-group">
+    <span class="filter-label">Hasta</span>
+    <input type="date" id="fc-to">
+  </div>
+  <div class="sep"></div>
+  <div class="filter-group">
+    <span class="filter-label">Closer</span>
+    <select id="fc-closer"><option value="">Todos</option></select>
+  </div>
+  <div class="sep"></div>
+  <button class="btn btn-primary" onclick="applyTabFilters()" style="font-size:12px;padding:6px 14px">Aplicar</button>
+  <button class="btn btn-secondary" onclick="resetTabFilters()" style="font-size:12px;padding:6px 14px">Limpiar</button>
+</div>
+
+<div class="filters" id="filters-calls" style="display:none">
+  <div class="filter-group">
+    <span class="filter-label">Desde</span>
+    <input type="date" id="fl-from">
+  </div>
+  <div class="filter-group">
+    <span class="filter-label">Hasta</span>
+    <input type="date" id="fl-to">
+  </div>
+  <div class="sep"></div>
+  <div class="filter-group">
+    <span class="filter-label">Closer</span>
+    <select id="fl-closer"><option value="">Todos</option></select>
+  </div>
+  <div class="sep"></div>
+  <button class="btn btn-primary" onclick="applyTabFilters()" style="font-size:12px;padding:6px 14px">Aplicar</button>
+  <button class="btn btn-secondary" onclick="resetTabFilters()" style="font-size:12px;padding:6px 14px">Limpiar</button>
+</div>
+
+<div class="filters" id="filters-pipeline" style="display:none">
+  <div class="filter-group">
+    <span class="filter-label">Desde</span>
+    <input type="date" id="fp-from">
+  </div>
+  <div class="filter-group">
+    <span class="filter-label">Hasta</span>
+    <input type="date" id="fp-to">
+  </div>
+  <div class="sep"></div>
+  <div class="filter-group">
+    <span class="filter-label">Closer</span>
+    <select id="fp-closer"><option value="">Todos</option></select>
+  </div>
+  <div class="sep"></div>
+  <button class="btn btn-primary" onclick="applyTabFilters()" style="font-size:12px;padding:6px 14px">Aplicar</button>
+  <button class="btn btn-secondary" onclick="resetTabFilters()" style="font-size:12px;padding:6px 14px">Limpiar</button>
 </div>
 
 <main>
   <div id="error-area"></div>
 
-  <!-- FINANCIERO -->
-  <div>
-    <div class="section-header">
-      <span class="section-label label-green">💰 Financiero</span>
-      <span class="section-title">Facturación & Cash</span>
+  <!-- ═══════ TAB 1 — Visión General ═══════ -->
+  <div class="tab-panel active" id="tab-overview">
+    <div>
+      <div class="section-header">
+        <span class="section-label label-green">💰 Financiero</span>
+        <span class="section-title">Facturación & Cash</span>
+      </div>
+      <div class="kpi-grid" id="kpi-fin"></div>
     </div>
-    <div class="kpi-grid" id="kpi-fin"></div>
-  </div>
-
-  <!-- LLAMADAS -->
-  <div>
-    <div class="section-header">
-      <span class="section-label label-blue">📞 Llamadas</span>
-      <span class="section-title">Actividad & Conversión</span>
+    <div class="grid-2">
+      <div class="card">
+        <div class="card-title">Ventas por País</div>
+        <div id="chart-paises"></div>
+      </div>
+      <div class="card">
+        <div class="card-title">Estados de Ventas</div>
+        <div id="chart-estados-v"></div>
+      </div>
     </div>
-    <div class="kpi-grid" id="kpi-calls"></div>
-  </div>
-
-  <!-- FILA GRÁFICOS 1 -->
-  <div class="grid-3">
-    <div class="card">
-      <div class="card-title">Estados de llamadas</div>
-      <div id="chart-estados-ev"></div>
-    </div>
-    <div class="card">
-      <div class="card-title">Show vs No Show <span class="card-title-sub">(leads)</span></div>
-      <div id="chart-show"></div>
-    </div>
-    <div class="card">
-      <div class="card-title">Puntualidad del Closer</div>
-      <div id="chart-puntualidad"></div>
+    <div class="grid-2">
+      <div class="card">
+        <div class="card-title">Facturación por Closer</div>
+        <div class="chart-canvas-wrap"><canvas id="canvas-fact-closer"></canvas></div>
+      </div>
+      <div class="card">
+        <div class="card-title">Cash Collected por Closer</div>
+        <div class="chart-canvas-wrap"><canvas id="canvas-cash-closer"></canvas></div>
+      </div>
     </div>
   </div>
 
-  <!-- TABLA CLOSERS -->
-  <div class="card">
-    <div class="card-title">
-      Performance por Closer
-      <span class="card-title-sub">Métricas individuales</span>
+  <!-- ═══════ TAB 2 — Performance Closers ═══════ -->
+  <div class="tab-panel" id="tab-closers">
+    <div class="card">
+      <div class="card-title">
+        Performance por Closer
+        <span class="card-title-sub">Métricas individuales</span>
+      </div>
+      <div style="overflow-x:auto">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Closer</th>
+              <th>Leads cualif.</th>
+              <th>Atendidas</th>
+              <th>Ventas</th>
+              <th>T. cierre / atendida</th>
+              <th>T. cierre / cualificada</th>
+              <th>Asist. Closer</th>
+              <th>No Show Lead</th>
+              <th>Yes Show Lead</th>
+              <th>Facturación</th>
+              <th>Cash Collected</th>
+              <th>AOV ticket</th>
+              <th>Comis. a pagar</th>
+              <th>Comis. restante</th>
+              <th>Duración media</th>
+              <th>Puntualidad</th>
+              <th>Retraso medio</th>
+            </tr>
+          </thead>
+          <tbody id="tbody-closers"></tbody>
+        </table>
+      </div>
     </div>
-    <div style="overflow-x:auto">
-      <table class="data-table">
-        <thead>
-          <tr>
-            <th>Closer</th>
-            <th>Leads cualif.</th>
-            <th>Atendidas</th>
-            <th>Ventas</th>
-            <th>T. cierre / atendida</th>
-            <th>T. cierre / agendada</th>
-            <th>Facturación</th>
-            <th>Cash Collected</th>
-            <th>AOV ticket</th>
-            <th>Comis. a pagar</th>
-            <th>Comis. restante</th>
-            <th>Duración media</th>
-            <th>Puntualidad</th>
-            <th>Retraso medio</th>
-          </tr>
-        </thead>
-        <tbody id="tbody-closers"></tbody>
-      </table>
+    <div class="grid-3">
+      <div class="card">
+        <div class="card-title">Radar de Scores <span class="card-title-sub">(promedio)</span></div>
+        <div class="chart-canvas-wrap"><canvas id="canvas-radar"></canvas></div>
+      </div>
+      <div class="card">
+        <div class="card-title">Puntualidad del Closer</div>
+        <div id="chart-puntualidad"></div>
+      </div>
+      <div class="card">
+        <div class="card-title">Responsabilidad Closer / Lead</div>
+        <div id="chart-responsabilidad"></div>
+      </div>
     </div>
   </div>
 
-  <!-- FILA GRÁFICOS 2 -->
-  <div class="grid-2">
-    <div class="card">
-      <div class="card-title">Ventas por País</div>
-      <div id="chart-paises"></div>
+  <!-- ═══════ TAB 3 — Análisis de Llamadas ═══════ -->
+  <div class="tab-panel" id="tab-calls">
+    <div class="grid-2">
+      <div class="card">
+        <div class="card-title">Objeciones Principales</div>
+        <div id="chart-objeciones"></div>
+      </div>
+      <div class="card">
+        <div class="card-title">Tipos de Cierre</div>
+        <div id="chart-tipos-cierre"></div>
+      </div>
+    </div>
+    <div class="grid-2">
+      <div class="card">
+        <div class="card-title">Nivel de Conciencia</div>
+        <div id="chart-conciencia"></div>
+      </div>
+      <div class="card">
+        <div class="card-title">Nivel de Urgencia</div>
+        <div id="chart-urgencia"></div>
+      </div>
+    </div>
+    <div class="grid-2">
+      <div class="card">
+        <div class="card-title">Habilidades a Entrenar</div>
+        <div id="chart-habilidades"></div>
+      </div>
+      <div class="card">
+        <div class="card-title">Histograma de Puntuaciones</div>
+        <div class="chart-canvas-wrap"><canvas id="canvas-histogram"></canvas></div>
+      </div>
     </div>
     <div class="card">
-      <div class="card-title">Estados de Ventas</div>
-      <div id="chart-estados-v"></div>
+      <div class="card-title">Scores Promedio</div>
+      <div class="score-grid" id="chart-scores"></div>
     </div>
   </div>
 
-
-
+  <!-- ═══════ TAB 4 — Pipeline / Agenda ═══════ -->
+  <div class="tab-panel" id="tab-pipeline">
+    <div>
+      <div class="section-header">
+        <span class="section-label label-blue">📞 Pipeline</span>
+        <span class="section-title">Actividad & Conversión</span>
+      </div>
+      <div class="kpi-grid" id="kpi-pipeline"></div>
+    </div>
+    <div class="grid-3">
+      <div class="card">
+        <div class="card-title">Estados de Eventos</div>
+        <div id="chart-estados-ev"></div>
+      </div>
+      <div class="card">
+        <div class="card-title">Show vs No Show <span class="card-title-sub">(leads)</span></div>
+        <div id="chart-show"></div>
+      </div>
+      <div class="card">
+        <div class="card-title">Triaje vs Venta</div>
+        <div id="chart-triaje"></div>
+      </div>
+    </div>
+    <div class="grid-2">
+      <div class="card">
+        <div class="card-title">Tendencia de Eventos por Día</div>
+        <div class="chart-canvas-wrap"><canvas id="canvas-trend-day"></canvas></div>
+      </div>
+      <div class="card">
+        <div class="card-title">No Shows — Detalle</div>
+        <div id="chart-noshows"></div>
+      </div>
+    </div>
+  </div>
 </main>
 </div>
 
 <script>
+// ═══════════════════════════════════════════════════════════════
+// URLS — TSV output
+// ═══════════════════════════════════════════════════════════════
 const URLS = {
-  eventos: 'https://docs.google.com/spreadsheets/d/e/2PACX-1vQ4MN5yZTyQyLuQyPV5l6A7sPAQqfT-a6zAZUWNt4G3ghwRw5P70aqMzckkPQQ5UDAjxg7pLgtJ1qUg/pub?gid=0&single=true&output=csv',
-  informes: 'https://docs.google.com/spreadsheets/d/e/2PACX-1vQ4MN5yZTyQyLuQyPV5l6A7sPAQqfT-a6zAZUWNt4G3ghwRw5P70aqMzckkPQQ5UDAjxg7pLgtJ1qUg/pub?gid=1266441844&single=true&output=csv',
-  ventas:   'https://docs.google.com/spreadsheets/d/e/2PACX-1vQ4MN5yZTyQyLuQyPV5l6A7sPAQqfT-a6zAZUWNt4G3ghwRw5P70aqMzckkPQQ5UDAjxg7pLgtJ1qUg/pub?gid=55724617&single=true&output=csv'
+  eventos:  'https://docs.google.com/spreadsheets/d/e/2PACX-1vQ4MN5yZTyQyLuQyPV5l6A7sPAQqfT-a6zAZUWNt4G3ghwRw5P70aqMzckkPQQ5UDAjxg7pLgtJ1qUg/pub?gid=0&single=true&output=tsv',
+  informes: 'https://docs.google.com/spreadsheets/d/e/2PACX-1vQ4MN5yZTyQyLuQyPV5l6A7sPAQqfT-a6zAZUWNt4G3ghwRw5P70aqMzckkPQQ5UDAjxg7pLgtJ1qUg/pub?gid=1266441844&single=true&output=tsv',
+  ventas:   'https://docs.google.com/spreadsheets/d/e/2PACX-1vQ4MN5yZTyQyLuQyPV5l6A7sPAQqfT-a6zAZUWNt4G3ghwRw5P70aqMzckkPQQ5UDAjxg7pLgtJ1qUg/pub?gid=55724617&single=true&output=tsv'
 };
 
 // Prefijos cualificados: Europa + México + USA/Canadá
 const QUALIFIED_PREFIXES = [
-  '1',   // USA + Canadá (10 dígitos tras el 1)
-  '33',  // Francia
-  '34',  // España
-  '39',  // Italia
-  '44',  // UK
-  '49',  // Alemania
-  '31',  // Países Bajos
-  '32',  // Bélgica
-  '351', // Portugal
-  '41',  // Suiza
-  '352', // Luxemburgo
-  '43',  // Austria
-  '45',  // Dinamarca
-  '46',  // Suecia
-  '47',  // Noruega
-  '48',  // Polonia
-  '52',  // México
+  '1','33','34','39','44','49','31','32','351','41','352','43','45','46','47','48','52',
 ];
 
 function isQualified(phone) {
   if (!phone) return false;
   const p = String(phone).replace(/\D/g,'');
-  // USA/Canadá: empieza por 1 + 10 dígitos = 11 dígitos total
   if (p.startsWith('1') && p.length === 11) return true;
-  // Resto de prefijos
   for (const pfx of QUALIFIED_PREFIXES) {
-    if (pfx === '1') continue; // ya tratado
+    if (pfx === '1') continue;
     if (p.startsWith(pfx)) return true;
   }
   return false;
@@ -437,36 +637,30 @@ function isQualified(phone) {
 
 let RAW = { eventos:[], informes:[], ventas:[] };
 let F   = { eventos:[], informes:[], ventas:[] };
+let activeTab = 'tab-overview';
 
-// CSV parser
-function parseCSV(text) {
+// ═══════════════════════════════════════════════════════════════
+// TSV parser (tab-separated, no quoting issues with commas)
+// ═══════════════════════════════════════════════════════════════
+function parseTSV(text) {
   const lines = text.trim().split('\n');
   if (!lines.length) return [];
-  const headers = parseLine(lines[0]);
+  const headers = lines[0].split('\t').map(h => h.trim().replace(/^"+|"+$/g,''));
   return lines.slice(1).map(l => {
-    const vals = parseLine(l);
+    const vals = l.split('\t');
     const o = {};
-    headers.forEach((h,i) => o[h] = (vals[i]??'').trim());
+    headers.forEach((h,i) => o[h] = (vals[i]??'').trim().replace(/^"+|"+$/g,''));
     return o;
   }).filter(r => Object.values(r).some(v=>v!==''));
 }
-function parseLine(line) {
-  const res=[]; let cur=''; let q=false;
-  for (let i=0;i<line.length;i++) {
-    const c=line[i];
-    if (c==='"') q=!q;
-    else if (c===','&&!q) { res.push(cur.trim()); cur=''; }
-    else cur+=c;
-  }
-  res.push(cur.trim()); return res;
-}
 
+// ═══════════════════════════════════════════════════════════════
+// Utility helpers (preserved from original)
+// ═══════════════════════════════════════════════════════════════
 function toNum(v) {
   if (v===null||v===undefined||v==='') return 0;
   let s = String(v).trim();
-  // Strip surrounding quotes from CSV
   s = s.replace(/^"+|"+$/g,'').trim();
-  // Remove currency, spaces, non-breaking spaces, %
   s = s.replace(/[\u20ac$\u00a3\s\u00a0%]/g,'');
   if (!s) return 0;
   // European: 1.333,00 = thousands dot + decimal comma
@@ -493,203 +687,187 @@ function avg(arr) { return arr.length ? arr.reduce((a,b)=>a+b,0)/arr.length : 0;
 function counter(arr,key) { const c={}; arr.forEach(r=>{ const v=r[key]||'—'; c[v]=(c[v]||0)+1; }); return c; }
 function sumF(arr,key) { return arr.reduce((s,r)=>s+toNum(r[key]),0); }
 
+// ═══════════════════════════════════════════════════════════════
 // Fetch
-async function fetchCSV(url) {
+// ═══════════════════════════════════════════════════════════════
+async function fetchSheet(url) {
   const r = await fetch(url+'&t='+Date.now());
   if (!r.ok) throw new Error('HTTP '+r.status);
-  return parseCSV(await r.text());
+  return parseTSV(await r.text());
 }
 
 function setMsg(t) { const e=document.getElementById('loading-msg'); if(e) e.textContent=t; }
 
+function showSpinner() {
+  if (document.getElementById('spinner-overlay')) return;
+  const d = document.createElement('div');
+  d.id = 'spinner-overlay'; d.className = 'spinner-overlay';
+  d.innerHTML = '<div class="spinner-ring"></div><div style="font-size:13px;color:var(--muted)">Actualizando datos…</div>';
+  document.body.appendChild(d);
+}
+function hideSpinner() {
+  const el = document.getElementById('spinner-overlay');
+  if (el) el.remove();
+}
+
 async function loadData() {
-  const btn=document.getElementById('btn-refresh');
-  btn.disabled=true; btn.innerHTML='<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5"><path d="M1 4v6h6M23 20v-6h-6"/><path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15"/></svg> Cargando...';
+  const btn = document.getElementById('btn-refresh');
+  const isInitial = document.getElementById('loading-screen').style.display !== 'none';
+  btn.disabled = true;
+  btn.innerHTML = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5"><path d="M1 4v6h6M23 20v-6h-6"/><path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15"/></svg> Cargando...';
+  if (!isInitial) showSpinner();
   setMsg('Cargando Eventos Calendar...');
   try {
-    RAW.eventos  = await fetchCSV(URLS.eventos);
+    RAW.eventos  = await fetchSheet(URLS.eventos);
     setMsg('Cargando Informes...');
-    RAW.informes = await fetchCSV(URLS.informes);
+    RAW.informes = await fetchSheet(URLS.informes);
     setMsg('Cargando Ventas...');
-    RAW.ventas   = await fetchCSV(URLS.ventas);
-    populateFilters();
-    applyFilters();
+    RAW.ventas   = await fetchSheet(URLS.ventas);
+    populateAllFilters();
+    applyTabFilters();
     document.getElementById('last-update').textContent = 'Act. '+new Date().toLocaleTimeString('es-ES');
     document.getElementById('loading-screen').style.display='none';
     document.getElementById('dashboard').style.display='block';
   } catch(e) {
-    showError('Error al cargar datos: '+e.message+'. Verifica que las hojas están publicadas como CSV.');
+    showError('Error al cargar datos: '+e.message+'. Verifica que las hojas están publicadas.');
     document.getElementById('loading-screen').style.display='none';
     document.getElementById('dashboard').style.display='block';
     console.error(e);
   }
-  btn.disabled=false; btn.innerHTML='<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5"><path d="M1 4v6h6M23 20v-6h-6"/><path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15"/></svg> Actualizar';
+  hideSpinner();
+  btn.disabled = false;
+  btn.innerHTML = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5"><path d="M1 4v6h6M23 20v-6h-6"/><path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15"/></svg> Actualizar';
 }
 
 function showError(msg) {
   document.getElementById('error-area').innerHTML=`<div class="alert-error">⚠️ ${msg}</div>`;
 }
 
-function populateFilters() {
-  const closers=[...new Set([...RAW.eventos.map(r=>r.closer),...RAW.ventas.map(r=>r.closer)].filter(Boolean))].sort();
-  const fc=document.getElementById('f-closer');
-  fc.innerHTML='<option value="">Todos</option>'+closers.map(c=>`<option>${c}</option>`).join('');
-
-  const paises=[...new Set(RAW.ventas.map(r=>r.pais).filter(Boolean))].sort();
-  const fp=document.getElementById('f-pais');
-  fp.innerHTML='<option value="">Todos</option>'+paises.map(p=>`<option>${p}</option>`).join('');
-
-  const estados=[...new Set(RAW.ventas.map(r=>r.estado).filter(Boolean))].sort();
-  const fe=document.getElementById('f-estado');
-  fe.innerHTML='<option value="">Todos</option>'+estados.map(e=>`<option>${e}</option>`).join('');
+// ═══════════════════════════════════════════════════════════════
+// TAB NAVIGATION
+// ═══════════════════════════════════════════════════════════════
+function switchTab(tabId, el) {
+  activeTab = tabId;
+  // Buttons
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  el.classList.add('active');
+  // Panels
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+  document.getElementById(tabId).classList.add('active');
+  // Filters
+  const filterMap = {'tab-overview':'filters-overview','tab-closers':'filters-closers','tab-calls':'filters-calls','tab-pipeline':'filters-pipeline'};
+  Object.values(filterMap).forEach(f => document.getElementById(f).style.display='none');
+  document.getElementById(filterMap[tabId]).style.display='flex';
+  // Re-render active tab
+  applyTabFilters();
 }
 
-function inputDate(id) {
+// ═══════════════════════════════════════════════════════════════
+// FILTERS — per tab
+// ═══════════════════════════════════════════════════════════════
+function populateAllFilters() {
+  const closers = [...new Set([...RAW.eventos.map(r=>r.closer),...RAW.ventas.map(r=>r.closer),...RAW.informes.map(r=>r.closer)].filter(Boolean))].sort();
+  const paises  = [...new Set(RAW.ventas.map(r=>r.pais).filter(Boolean))].sort();
+  const optCloser = '<option value="">Todos</option>'+closers.map(c=>`<option>${c}</option>`).join('');
+  const optPais   = '<option value="">Todos</option>'+paises.map(p=>`<option>${p}</option>`).join('');
+  ['fo-closer','fc-closer','fl-closer','fp-closer'].forEach(id => document.getElementById(id).innerHTML = optCloser);
+  document.getElementById('fo-pais').innerHTML = optPais;
+}
+
+function getDateVal(id) {
   const v = document.getElementById(id).value;
   if (!v) return null;
   const [y,m,d] = v.split('-').map(Number);
   return new Date(y, m-1, d);
 }
 
-function applyFilters() {
-  const from   = inputDate('f-from');
-  const to     = inputDate('f-to');
-  const toEnd  = to ? new Date(to.getFullYear(), to.getMonth(), to.getDate(), 23, 59, 59) : null;
-  const closer = document.getElementById('f-closer').value;
-  const pais   = document.getElementById('f-pais').value;
-  const estado = document.getElementById('f-estado').value;
+function applyTabFilters() {
+  // Determine which filters based on active tab
+  let prefix, dateFieldEv, dateFieldInf, dateFieldV, hasPais;
+  if (activeTab === 'tab-overview')   { prefix='fo'; dateFieldV='fecha_compra';    dateFieldEv='fecha_llamada'; dateFieldInf='fecha_realizacion'; hasPais=true; }
+  if (activeTab === 'tab-closers')    { prefix='fc'; dateFieldEv='fecha_llamada';  dateFieldInf='fecha_realizacion'; dateFieldV='fecha_compra'; hasPais=false; }
+  if (activeTab === 'tab-calls')      { prefix='fl'; dateFieldInf='fecha_realizacion'; dateFieldEv='fecha_llamada'; dateFieldV='fecha_compra'; hasPais=false; }
+  if (activeTab === 'tab-pipeline')   { prefix='fp'; dateFieldEv='fecha_llamada';  dateFieldInf='fecha_realizacion'; dateFieldV='fecha_compra'; hasPais=false; }
 
+  const from   = getDateVal(prefix+'-from');
+  const to     = getDateVal(prefix+'-to');
+  const toEnd  = to ? new Date(to.getFullYear(), to.getMonth(), to.getDate(), 23, 59, 59) : null;
+  const closer = document.getElementById(prefix+'-closer').value;
+  const pais   = hasPais ? document.getElementById('fo-pais').value : '';
+
+  // Filter eventos by dateFieldEv
   F.eventos = RAW.eventos.filter(r => {
-    const d=parseDate(r.fecha_llamada);
+    const d=parseDate(r[dateFieldEv]);
     if (from&&d&&d<from) return false;
     if (toEnd&&d&&d>toEnd) return false;
     if (closer&&r.closer!==closer) return false;
     return true;
   });
+  // Filter informes by dateFieldInf
   F.informes = RAW.informes.filter(r => {
-    const d=parseDate(r.fecha_realizacion);
+    const d=parseDate(r[dateFieldInf]);
     if (from&&d&&d<from) return false;
     if (toEnd&&d&&d>toEnd) return false;
     if (closer&&r.closer!==closer) return false;
     return true;
   });
+  // Filter ventas by dateFieldV
   F.ventas = RAW.ventas.filter(r => {
-    const d=parseDate(r.fecha_compra);
+    const d=parseDate(r[dateFieldV]);
     if (from&&d&&d<from) return false;
     if (toEnd&&d&&d>toEnd) return false;
     if (closer&&r.closer!==closer) return false;
     if (pais&&r.pais!==pais) return false;
-    if (estado&&r.estado!==estado) return false;
     return true;
   });
-  renderAll();
-}
-function resetFilters() {
-  ['f-from','f-to'].forEach(id=>document.getElementById(id).value='');
-  ['f-closer','f-pais','f-estado'].forEach(id=>document.getElementById(id).value='');
-  applyFilters();
+  renderActiveTab();
 }
 
-// RENDER ALL
-function renderAll() {
-  renderFinanciero();
-  renderLlamadas();
-  renderChartEstadosEv();
-  renderChartShow();
-  renderChartPuntualidad();
-  renderTablaClosers();
-  renderChartPaises();
-  renderChartEstadosV();
+function resetTabFilters() {
+  let prefix, hasPais=false;
+  if (activeTab==='tab-overview')  { prefix='fo'; hasPais=true; }
+  if (activeTab==='tab-closers')   { prefix='fc'; }
+  if (activeTab==='tab-calls')     { prefix='fl'; }
+  if (activeTab==='tab-pipeline')  { prefix='fp'; }
+  document.getElementById(prefix+'-from').value='';
+  document.getElementById(prefix+'-to').value='';
+  document.getElementById(prefix+'-closer').value='';
+  if (hasPais) document.getElementById('fo-pais').value='';
+  applyTabFilters();
 }
 
-// ── FINANCIERO ────────────────────────────────────────────
-function renderFinanciero() {
-  const v = F.ventas;
-  // Log all column keys from first row to detect naming issues
-  if (v.length > 0) {
-    console.log('=== COLS CSV ===', Object.keys(v[0]));
-    console.log('inversion_total:', v.slice(0,3).map(r=>r.inversion_total));
-    console.log('importe_pendiente:', v.slice(0,3).map(r=>r.importe_pendiente));
-    console.log('importe_ingresado:', v.slice(0,3).map(r=>r.importe_ingresado));
-    console.log('comision_total:', v.slice(0,3).map(r=>r.comision_total));
+// ═══════════════════════════════════════════════════════════════
+// CHART.JS INSTANCE MANAGEMENT — destroy before recreate
+// ═══════════════════════════════════════════════════════════════
+const chartInstances = {};
+function getOrCreateChart(canvasId, config) {
+  if (chartInstances[canvasId]) {
+    chartInstances[canvasId].destroy();
+    delete chartInstances[canvasId];
   }
-  const facturacion   = sumF(v,'inversion_total');
-  const pendiente     = sumF(v,'importe_pendiente');
-  const cash          = sumF(v,'importe_ingresado');
-  const cashPct       = facturacion ? (cash/facturacion*100).toFixed(1) : 0;
-  const aovCash       = avg(v.map(r=>toNum(r.importe_ingresado)).filter(n=>n>0));
-  const aovFact       = avg(v.map(r=>toNum(r.inversion_total)).filter(n=>n>0));
-  const comAPagar     = sumF(v,'comision_a_pagar');
-  const comRestante   = sumF(v,'comision_restante');
-  const comTotal      = sumF(v,'comision_total');
-
-  const kpis=[
-    { label:'Facturación Total', value:fmtE(facturacion), sub:`${v.length} ventas totales`, icon:'💶', color:'var(--green)', pct:100 },
-    { label:'Cash Collected', value:fmtE(cash), sub:`${cashPct}% sobre facturación`, icon:'✅', color:'var(--accent)', pct:parseFloat(cashPct) },
-    { label:'Importe Pendiente', value:fmtE(pendiente), sub:'Cuotas por cobrar', icon:'⏳', color:'var(--orange)', pct: facturacion ? pendiente/facturacion*100 : 0 },
-    { label:'% Cash / Facturación', value:cashPct+'%', sub:'Tasa de cobro efectiva', icon:'📈', color:'var(--green)', pct:parseFloat(cashPct) },
-    { label:'AOV Cash Collected', value:fmtE(aovCash), sub:'Promedio importe ingresado', icon:'🎯', color:'var(--accent)', pct:null },
-    { label:'AOV Facturación', value:fmtE(aovFact), sub:'Promedio inversión total', icon:'📊', color:'var(--purple)', pct:null },
-    { label:'Comisión a Pagar', value:fmtE(comAPagar), sub:'Comisiones pendientes', icon:'💸', color:'var(--orange)', pct:null },
-    { label:'Comisión Restante', value:fmtE(comRestante), sub:'Por liquidar', icon:'🔄', color:'var(--muted)', pct:null },
-    { label:'Comisión Total', value:fmtE(comTotal), sub:'Suma total generada', icon:'💰', color:'var(--green)', pct:null },
-  ];
-
-  document.getElementById('kpi-fin').innerHTML = kpis.map(k=>`
-    <div class="kpi">
-      <div class="kpi-header">
-        <div class="kpi-label">${k.label}</div>
-        <div class="kpi-icon" style="background:${k.color}18">${k.icon}</div>
-      </div>
-      <div class="kpi-value">${k.value}</div>
-      <div class="kpi-sub">${k.sub}</div>
-      ${k.pct!==null ? `<div class="kpi-bar"><div class="kpi-bar-fill" style="width:${Math.min(k.pct,100)}%;background:${k.color}"></div></div>` : ''}
-    </div>`).join('');
+  const canvas = document.getElementById(canvasId);
+  if (!canvas) return null;
+  const ctx = canvas.getContext('2d');
+  chartInstances[canvasId] = new Chart(ctx, config);
+  return chartInstances[canvasId];
 }
 
-// ── LLAMADAS ──────────────────────────────────────────────
-function renderLlamadas() {
-  const ev  = F.eventos;
-  const inf = F.informes;
-  const v   = F.ventas;
-
-  // Leads cualificados = eventos con teléfono de prefijo válido
-  const cualif    = ev.filter(r=>isQualified(r.telefono));
-  const realizadas= ev.filter(r=>r.estado==='Realizada');
-  const noShowLead= ev.filter(r=>r.estado==='No show lead');
-  const noShowClos= ev.filter(r=>r.estado==='No show closer');
-  const canceladas= ev.filter(r=>r.estado==='Cancelada');
-  const ventas    = v.length;
-  const tasaAte   = realizadas.length ? (ventas/realizadas.length*100).toFixed(1) : 0;
-  const tasaAge   = cualif.length     ? (ventas/cualif.length*100).toFixed(1)     : 0;
-  const durs      = inf.map(r=>toNum(r.duracion)).filter(n=>n>0);
-  const durMedia  = avg(durs).toFixed(1);
-  const showRate  = ev.length ? ((ev.length-noShowLead.length)/ev.length*100).toFixed(1) : 0;
-
-  const kpis=[
-    { label:'Leads Cualificados', value:fmt(cualif.length), sub:'Prefijo EU / MX / USA / CA', icon:'🎯', color:'var(--accent)' },
-    { label:'Llamadas Realizadas', value:fmt(realizadas.length), sub:pct(realizadas.length,ev.length)+' del total agendado', icon:'📞', color:'var(--green)' },
-    { label:'No Show — Lead', value:fmt(noShowLead.length), sub:pct(noShowLead.length,ev.length)+' no asistieron', icon:'❌', color:'var(--red)' },
-    { label:'No Show — Closer', value:fmt(noShowClos.length), sub:pct(noShowClos.length,ev.length)+' fallo del closer', icon:'⚠️', color:'var(--orange)' },
-    { label:'Canceladas', value:fmt(canceladas.length), sub:pct(canceladas.length,ev.length)+' del total', icon:'🚫', color:'var(--muted)' },
-    { label:'Tasa Cierre / Atendida', value:tasaAte+'%', sub:`${ventas} ventas / ${realizadas.length} atendidas`, icon:'🏆', color:'var(--green)' },
-    { label:'Tasa Cierre / Cualificada', value:tasaAge+'%', sub:`${ventas} ventas / ${cualif.length} cualificadas`, icon:'📈', color:'var(--accent)' },
-    { label:'Duración Media', value:durMedia+' min', sub:'Por llamada analizada', icon:'⏱️', color:'var(--purple)' },
-  ];
-
-  document.getElementById('kpi-calls').innerHTML = kpis.map(k=>`
-    <div class="kpi">
-      <div class="kpi-header">
-        <div class="kpi-label">${k.label}</div>
-        <div class="kpi-icon" style="background:${k.color}18">${k.icon}</div>
-      </div>
-      <div class="kpi-value">${k.value}</div>
-      <div class="kpi-sub">${k.sub}</div>
-    </div>`).join('');
+// ═══════════════════════════════════════════════════════════════
+// RENDER — only active tab
+// ═══════════════════════════════════════════════════════════════
+function renderActiveTab() {
+  switch(activeTab) {
+    case 'tab-overview':  renderOverview(); break;
+    case 'tab-closers':   renderClosers(); break;
+    case 'tab-calls':     renderCalls(); break;
+    case 'tab-pipeline':  renderPipeline(); break;
+  }
 }
 
-// ── CHART HELPERS ─────────────────────────────────────────
-const PAL = ['#1a56db','#057a55','#b45309','#5521b5','#c81e1e','#0694a2','#9b1c1c','#7e3af2'];
+// ═══════════════════════════════════════════════════════════════
+// VISUAL HELPERS
+// ═══════════════════════════════════════════════════════════════
+const PAL = ['#1a56db','#057a55','#b45309','#5521b5','#c81e1e','#0694a2','#9b1c1c','#7e3af2','#047481','#6c2bd9'];
 
 function barChart(id, data) {
   const max = Math.max(...data.map(d=>d.val),1);
@@ -705,7 +883,7 @@ function donut(id, data) {
   const total = data.reduce((s,d)=>s+d.val,0)||1;
   const size=120, r=46, cx=60, cy=60;
   let a=-Math.PI/2, paths='';
-  data.forEach((d,i)=>{
+  data.forEach((d,i) => {
     const slice=(d.val/total)*Math.PI*2;
     if(!slice) return;
     const x1=cx+r*Math.cos(a), y1=cy+r*Math.sin(a);
@@ -729,50 +907,105 @@ function donut(id, data) {
     </div>`;
 }
 
-// ── CHARTS ────────────────────────────────────────────────
-function renderChartEstadosEv() {
-  const c=counter(F.eventos,'estado');
-  const order=['Realizada','En curso','Cancelada','No show lead','No show closer'];
-  const data=order.filter(k=>c[k]).map(k=>({label:k,val:c[k]}));
-  donut('chart-estados-ev',data);
+
+// ═══════════════════════════════════════════════════════════════
+// TAB 1 — Visión General
+// ═══════════════════════════════════════════════════════════════
+function renderOverview() {
+  renderFinanciero();
+  renderChartPaises();
+  renderChartEstadosV();
+  renderFactCloserChart();
+  renderCashCloserChart();
 }
 
-function renderChartShow() {
-  const ev=F.eventos;
-  const show=ev.filter(r=>r.estado&&r.estado!=='No show lead').length;
-  const noShow=ev.filter(r=>r.estado==='No show lead').length;
-  donut('chart-show',[
-    {label:'Show (asiste)',val:show},
-    {label:'No Show',val:noShow}
-  ]);
+function renderFinanciero() {
+  const v = F.ventas;
+  const facturacion   = sumF(v,'inversion_total');
+  const pendiente     = sumF(v,'importe_pendiente');
+  const cash          = sumF(v,'importe_ingresado');
+  const cashPct       = facturacion ? (cash/facturacion*100).toFixed(1) : 0;
+  const aovCash       = avg(v.map(r=>toNum(r.importe_ingresado)).filter(n=>n>0));
+  const aovFact       = avg(v.map(r=>toNum(r.inversion_total)).filter(n=>n>0));
+  const comAPagar     = sumF(v,'comision_a_pagar');
+  const comRestante   = sumF(v,'comision_restante');
+  const comTotal      = sumF(v,'comision_total');
+  // Morosidad
+  const morosidad     = v.filter(r=>(r.estado||'').toLowerCase()==='morosidad');
+  const morosidadPct  = v.length ? (morosidad.length/v.length*100).toFixed(1) : 0;
+
+  const kpis=[
+    { label:'Facturación Total', value:fmtE(facturacion), sub:`${v.length} ventas totales`, icon:'💶', color:'var(--green)', pct:100 },
+    { label:'Cash Collected', value:fmtE(cash), sub:`${cashPct}% sobre facturación`, icon:'✅', color:'var(--accent)', pct:parseFloat(cashPct) },
+    { label:'Importe Pendiente', value:fmtE(pendiente), sub:'Cuotas por cobrar', icon:'⏳', color:'var(--orange)', pct: facturacion ? pendiente/facturacion*100 : 0 },
+    { label:'% Cash / Facturación', value:cashPct+'%', sub:'Tasa de cobro efectiva', icon:'📈', color:'var(--green)', pct:parseFloat(cashPct) },
+    { label:'AOV Facturación', value:fmtE(aovFact), sub:'Media inversión total', icon:'📊', color:'var(--purple)', pct:null },
+    { label:'AOV Cash Collected', value:fmtE(aovCash), sub:'Media importe ingresado', icon:'🎯', color:'var(--accent)', pct:null },
+    { label:'Clientes en Morosidad', value:morosidad.length+'', sub:`${morosidadPct}% sobre total`, icon:'🚨', color:'var(--red)', pct:parseFloat(morosidadPct) },
+    { label:'Comisión a Pagar', value:fmtE(comAPagar), sub:'Comisiones pendientes', icon:'💸', color:'var(--orange)', pct:null },
+    { label:'Comisión Restante', value:fmtE(comRestante), sub:'Por liquidar', icon:'🔄', color:'var(--muted)', pct:null },
+    { label:'Comisión Total', value:fmtE(comTotal), sub:'Suma total generada', icon:'💰', color:'var(--green)', pct:null },
+  ];
+
+  document.getElementById('kpi-fin').innerHTML = kpis.map(k=>`
+    <div class="kpi">
+      <div class="kpi-header">
+        <div class="kpi-label">${k.label}</div>
+        <div class="kpi-icon" style="background:${k.color}18">${k.icon}</div>
+      </div>
+      <div class="kpi-value">${k.value}</div>
+      <div class="kpi-sub">${k.sub}</div>
+      ${k.pct!==null ? `<div class="kpi-bar"><div class="kpi-bar-fill" style="width:${Math.min(k.pct,100)}%;background:${k.color}"></div></div>` : ''}
+    </div>`).join('');
 }
 
-function renderChartPuntualidad() {
-  const inf = F.informes;
-  // Normalize to 3 categories
-  const cats = {'Puntual':0,'Leve retraso':0,'Tarde':0};
-  inf.forEach(r => {
-    const p = (r.puntualidad||'').trim();
-    if (p === 'Puntual') cats['Puntual']++;
-    else if (p === 'Leve retraso') cats['Leve retraso']++;
-    else if (p === 'Tarde') cats['Tarde']++;
+function renderChartPaises() {
+  const c=counter(F.ventas,'pais');
+  const data=Object.entries(c).filter(([k])=>k&&k!=='—').sort((a,b)=>b[1]-a[1]).map(([label,val])=>({label,val}));
+  if(!data.length){document.getElementById('chart-paises').innerHTML='<p style="color:var(--muted);font-size:12px;margin-top:8px">Sin datos</p>';return;}
+  barChart('chart-paises',data);
+}
+
+function renderChartEstadosV() {
+  const c=counter(F.ventas,'estado');
+  const data=Object.entries(c).filter(([k])=>k&&k!=='—').sort((a,b)=>b[1]-a[1]).map(([label,val])=>({label,val}));
+  donut('chart-estados-v',data);
+}
+
+function renderFactCloserChart() {
+  const closers = [...new Set(F.ventas.map(r=>r.closer).filter(Boolean))].sort();
+  const vals = closers.map(c => sumF(F.ventas.filter(r=>r.closer===c),'inversion_total'));
+  getOrCreateChart('canvas-fact-closer', {
+    type: 'bar',
+    data: { labels: closers, datasets: [{ label: 'Facturación €', data: vals, backgroundColor: PAL.slice(0,closers.length).map(c=>c+'cc'), borderRadius: 6 }] },
+    options: { responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false}}, scales:{y:{beginAtZero:true,ticks:{callback:v=>fmt(v)+' €'}}} }
   });
-  const data = Object.entries(cats).filter(([,v])=>v>0).map(([label,val])=>({label,val}));
-  if(!data.length){document.getElementById('chart-puntualidad').innerHTML='<p style="color:var(--muted);font-size:12px;margin-top:8px">Sin datos de informes</p>';return;}
-  // Add avg retraso
-  const retrasos = inf.map(r=>toNum(r.minutos_retraso)).filter(n=>n>0);
-  const avgRetraso = retrasos.length ? avg(retrasos).toFixed(1) : 0;
-  barChart('chart-puntualidad',data);
-  if(avgRetraso>0) {
-    document.getElementById('chart-puntualidad').innerHTML += 
-      '<div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border);font-size:12px;color:var(--muted2)">Retraso medio: <span style="color:var(--orange);font-weight:600">'+avgRetraso+' min</span></div>';
-  }
+}
+function renderCashCloserChart() {
+  const closers = [...new Set(F.ventas.map(r=>r.closer).filter(Boolean))].sort();
+  const vals = closers.map(c => sumF(F.ventas.filter(r=>r.closer===c),'importe_ingresado'));
+  getOrCreateChart('canvas-cash-closer', {
+    type: 'bar',
+    data: { labels: closers, datasets: [{ label: 'Cash Collected €', data: vals, backgroundColor: PAL.slice(0,closers.length).map(c=>c+'cc'), borderRadius: 6 }] },
+    options: { responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false}}, scales:{y:{beginAtZero:true,ticks:{callback:v=>fmt(v)+' €'}}} }
+  });
+}
+
+
+// ═══════════════════════════════════════════════════════════════
+// TAB 2 — Performance Closers
+// ═══════════════════════════════════════════════════════════════
+function renderClosers() {
+  renderTablaClosers();
+  renderRadarScores();
+  renderChartPuntualidad();
+  renderResponsabilidad();
 }
 
 function renderTablaClosers() {
   const closers=[...new Set([...F.eventos.map(r=>r.closer),...F.ventas.map(r=>r.closer)].filter(Boolean))].sort();
   const tbody=document.getElementById('tbody-closers');
-  if(!closers.length){tbody.innerHTML='<tr><td colspan="13" style="color:var(--muted);padding:16px">Sin datos</td></tr>';return;}
+  if(!closers.length){tbody.innerHTML='<tr><td colspan="17" style="color:var(--muted);padding:16px">Sin datos</td></tr>';return;}
 
   tbody.innerHTML=closers.map(c=>{
     const evC   = F.eventos.filter(r=>r.closer===c);
@@ -784,9 +1017,18 @@ function renderTablaClosers() {
     const ventas    = vC.length;
     const tasaAte   = atendidas ? (ventas/atendidas*100).toFixed(1)+'%' : '—';
     const tasaAge   = cualif    ? (ventas/cualif*100).toFixed(1)+'%'    : '—';
+    // Asistencia closer = % donde estado ≠ "No show closer"
+    const noShowCloser = evC.filter(r=>r.estado==='No show closer').length;
+    const asistCloser  = evC.length ? ((evC.length-noShowCloser)/evC.length*100).toFixed(1)+'%' : '—';
+    // No shows lead
+    const noShowLead   = evC.filter(r=>r.estado==='No show lead').length;
+    const noShowLeadPct= evC.length ? (noShowLead/evC.length*100).toFixed(1)+'%' : '0%';
+    // Yes shows lead
+    const yesShowLead  = evC.length - noShowLead;
+    const yesShowPct   = evC.length ? (yesShowLead/evC.length*100).toFixed(1)+'%' : '0%';
+
     const facturacion = sumF(vC,'inversion_total');
-    const pendiente   = sumF(vC,'importe_pendiente');
-    const cash        = facturacion - pendiente;
+    const cash        = sumF(vC,'importe_ingresado');
     const tickets     = vC.map(r=>toNum(r.ticket)).filter(n=>n>0);
     const aov         = avg(tickets);
     const comAPagar   = sumF(vC,'comision_a_pagar');
@@ -808,6 +1050,9 @@ function renderTablaClosers() {
       <td class="td-mono">${fmt(ventas)}</td>
       <td><span class="badge ${tasaBadge}">${tasaAte}</span></td>
       <td><span class="badge badge-blue">${tasaAge}</span></td>
+      <td><span class="badge badge-green">${asistCloser}</span></td>
+      <td class="td-mono">${noShowLead} <span style="color:var(--muted2);font-size:11px">(${noShowLeadPct})</span></td>
+      <td class="td-mono">${yesShowLead} <span style="color:var(--muted2);font-size:11px">(${yesShowPct})</span></td>
       <td class="td-mono">${fmtE(facturacion)}</td>
       <td class="td-mono">${fmtE(cash)}</td>
       <td class="td-mono">${aov?fmtE(aov):'—'}</td>
@@ -820,17 +1065,127 @@ function renderTablaClosers() {
   }).join('');
 }
 
-function renderChartPaises() {
-  const c=counter(F.ventas,'pais');
-  const data=Object.entries(c).filter(([k])=>k&&k!=='—').sort((a,b)=>b[1]-a[1]).map(([label,val])=>({label,val}));
-  if(!data.length){document.getElementById('chart-paises').innerHTML='<p style="color:var(--muted);font-size:12px;margin-top:8px">Sin datos</p>';return;}
-  barChart('chart-paises',data);
+function renderRadarScores() {
+  const inf=F.informes;
+  const fields=[
+    {key:'score_apertura',label:'Apertura'},
+    {key:'score_diagnostico',label:'Diagnóstico'},
+    {key:'score_pitch',label:'Pitch'},
+    {key:'score_gestion_objeciones',label:'Objeciones'},
+    {key:'score_cierre',label:'Cierre'},
+    {key:'score_liderazgo',label:'Liderazgo'},
+  ];
+  const vals = fields.map(f => {
+    const nums = inf.map(r=>toNum(r[f.key])).filter(n=>n>0);
+    return nums.length ? avg(nums) : 0;
+  });
+  getOrCreateChart('canvas-radar', {
+    type: 'radar',
+    data: {
+      labels: fields.map(f=>f.label),
+      datasets: [{ label:'Promedio', data:vals, backgroundColor:'rgba(26,86,219,0.15)', borderColor:'#1a56db', borderWidth:2, pointBackgroundColor:'#1a56db', pointRadius:4 }]
+    },
+    options: { responsive:true, maintainAspectRatio:false, scales:{ r:{ min:0, max:10, ticks:{stepSize:2,font:{size:10}}, pointLabels:{font:{size:11}} }}, plugins:{legend:{display:false}} }
+  });
 }
 
-function renderChartEstadosV() {
-  const c=counter(F.ventas,'estado');
-  const data=Object.entries(c).filter(([k])=>k&&k!=='—').sort((a,b)=>b[1]-a[1]).map(([label,val])=>({label,val}));
-  donut('chart-estados-v',data);
+function renderChartPuntualidad() {
+  const inf = F.informes;
+  const cats = {'Puntual':0,'Leve retraso':0,'Tarde':0};
+  inf.forEach(r => {
+    const p = (r.puntualidad||'').trim();
+    if (p === 'Puntual') cats['Puntual']++;
+    else if (p === 'Leve retraso') cats['Leve retraso']++;
+    else if (p === 'Tarde') cats['Tarde']++;
+  });
+  const data = Object.entries(cats).filter(([,v])=>v>0).map(([label,val])=>({label,val}));
+  if(!data.length){document.getElementById('chart-puntualidad').innerHTML='<p style="color:var(--muted);font-size:12px;margin-top:8px">Sin datos de informes</p>';return;}
+  const retrasos = inf.map(r=>toNum(r.minutos_retraso)).filter(n=>n>0);
+  const avgRetraso = retrasos.length ? avg(retrasos).toFixed(1) : 0;
+  barChart('chart-puntualidad',data);
+  if(avgRetraso>0) {
+    document.getElementById('chart-puntualidad').innerHTML +=
+      '<div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border);font-size:12px;color:var(--muted2)">Retraso medio: <span style="color:var(--orange);font-weight:600">'+avgRetraso+' min</span></div>';
+  }
+}
+
+function renderResponsabilidad() {
+  const ev = F.eventos;
+  const noShowCloser = ev.filter(r=>r.estado==='No show closer').length;
+  const noShowLead = ev.filter(r=>r.estado==='No show lead').length;
+  const realizadas = ev.filter(r=>r.estado==='Realizada').length;
+  const canceladas = ev.filter(r=>r.estado==='Cancelada').length;
+  const other = ev.length - noShowCloser - noShowLead - realizadas - canceladas;
+  donut('chart-responsabilidad',[
+    {label:'Realizada',val:realizadas},
+    {label:'No Show Lead',val:noShowLead},
+    {label:'No Show Closer',val:noShowCloser},
+    {label:'Cancelada',val:canceladas},
+    ...(other>0?[{label:'Otros',val:other}]:[]),
+  ]);
+}
+
+
+// ═══════════════════════════════════════════════════════════════
+// TAB 3 — Análisis de Llamadas
+// ═══════════════════════════════════════════════════════════════
+function renderCalls() {
+  renderObjeciones();
+  renderTiposCierre();
+  renderConciencia();
+  renderUrgencia();
+  renderHabilidades();
+  renderHistogram();
+  renderScores();
+}
+
+function renderObjeciones() {
+  const c=counter(F.informes,'objecion_principal');
+  const data=Object.entries(c).filter(([k])=>k&&k!=='—'&&k!=='').sort((a,b)=>b[1]-a[1]).map(([label,val])=>({label,val}));
+  if(!data.length){document.getElementById('chart-objeciones').innerHTML='<p style="color:var(--muted);font-size:12px">Sin datos</p>';return;}
+  barChart('chart-objeciones',data);
+}
+
+function renderTiposCierre() {
+  const c=counter(F.informes,'tipo_cierre');
+  const data=Object.entries(c).filter(([k])=>k&&k!=='—'&&k!=='').sort((a,b)=>b[1]-a[1]).map(([label,val])=>({label,val}));
+  if(!data.length){document.getElementById('chart-tipos-cierre').innerHTML='<p style="color:var(--muted);font-size:12px">Sin datos</p>';return;}
+  donut('chart-tipos-cierre',data);
+}
+
+function renderConciencia() {
+  const c=counter(F.informes,'nivel_conciencia');
+  const data=Object.entries(c).filter(([k])=>k&&k!=='—'&&k!=='').sort((a,b)=>b[1]-a[1]).map(([label,val])=>({label,val}));
+  if(!data.length){document.getElementById('chart-conciencia').innerHTML='<p style="color:var(--muted);font-size:12px">Sin datos</p>';return;}
+  donut('chart-conciencia',data);
+}
+
+function renderUrgencia() {
+  const c=counter(F.informes,'nivel_urgencia');
+  const data=Object.entries(c).filter(([k])=>k&&k!=='—'&&k!=='').sort((a,b)=>b[1]-a[1]).map(([label,val])=>({label,val}));
+  if(!data.length){document.getElementById('chart-urgencia').innerHTML='<p style="color:var(--muted);font-size:12px">Sin datos</p>';return;}
+  donut('chart-urgencia',data);
+}
+
+function renderHabilidades() {
+  const c=counter(F.informes,'habilidad_a_entrenar');
+  const data=Object.entries(c).filter(([k])=>k&&k!=='—'&&k!=='').sort((a,b)=>b[1]-a[1]).map(([label,val])=>({label,val}));
+  if(!data.length){document.getElementById('chart-habilidades').innerHTML='<p style="color:var(--muted);font-size:12px">Sin datos</p>';return;}
+  barChart('chart-habilidades',data);
+}
+
+function renderHistogram() {
+  const inf = F.informes;
+  const scores = inf.map(r=>toNum(r.puntuacion)).filter(n=>n>0);
+  // Buckets 0-1,1-2,...,9-10
+  const buckets = Array(10).fill(0);
+  scores.forEach(s => { const b=Math.min(Math.floor(s),9); buckets[b]++; });
+  const labels = buckets.map((_,i)=>`${i}-${i+1}`);
+  getOrCreateChart('canvas-histogram', {
+    type: 'bar',
+    data: { labels, datasets:[{label:'Llamadas', data:buckets, backgroundColor:'#1a56dbcc', borderRadius:4}] },
+    options: { responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false}}, scales:{y:{beginAtZero:true,ticks:{stepSize:1}},x:{title:{display:true,text:'Puntuación'}}} }
+  });
 }
 
 function renderScores() {
@@ -858,7 +1213,145 @@ function renderScores() {
   }).join('');
 }
 
+
+// ═══════════════════════════════════════════════════════════════
+// TAB 4 — Pipeline / Agenda
+// ═══════════════════════════════════════════════════════════════
+function renderPipeline() {
+  renderPipelineKPIs();
+  renderChartEstadosEv();
+  renderChartShow();
+  renderChartTriaje();
+  renderTrendDay();
+  renderNoShowsDetail();
+}
+
+function renderPipelineKPIs() {
+  const ev  = F.eventos;
+  const inf = F.informes;
+  const v   = F.ventas;
+
+  const cualif    = ev.filter(r=>isQualified(r.telefono));
+  const realizadas= ev.filter(r=>r.estado==='Realizada');
+  const noShowLead= ev.filter(r=>r.estado==='No show lead');
+  const noShowClos= ev.filter(r=>r.estado==='No show closer');
+  const canceladas= ev.filter(r=>r.estado==='Cancelada');
+  const ventas    = v.length;
+  const tasaAte   = realizadas.length ? (ventas/realizadas.length*100).toFixed(1) : 0;
+  const tasaAge   = cualif.length     ? (ventas/cualif.length*100).toFixed(1)     : 0;
+  const durs      = inf.map(r=>toNum(r.duracion)).filter(n=>n>0);
+  const durMedia  = avg(durs).toFixed(1);
+
+  // Alert: No show closer > 10%
+  const noShowCloserPct = ev.length ? (noShowClos.length/ev.length*100) : 0;
+  const noShowCloserAlert = noShowCloserPct > 10;
+  const noShowCloserHTML = noShowCloserAlert
+    ? `<span class="alert-warn-badge"><span class="warn-icon">⚠️</span>${fmt(noShowClos.length)}</span>`
+    : fmt(noShowClos.length);
+
+  const kpis=[
+    { label:'Leads Cualificados', value:fmt(cualif.length), sub:'Prefijo EU / MX / USA / CA', icon:'🎯', color:'var(--accent)' },
+    { label:'Llamadas Realizadas', value:fmt(realizadas.length), sub:pct(realizadas.length,ev.length)+' del total agendado', icon:'📞', color:'var(--green)' },
+    { label:'No Show — Lead', value:fmt(noShowLead.length), sub:pct(noShowLead.length,ev.length)+' no asistieron', icon:'❌', color:'var(--red)' },
+    { label:'No Show — Closer', value:noShowCloserHTML, sub:pct(noShowClos.length,ev.length)+' fallo del closer', icon:'⚠️', color: noShowCloserAlert ? 'var(--red)' : 'var(--orange)', raw:true },
+    { label:'Canceladas', value:fmt(canceladas.length), sub:pct(canceladas.length,ev.length)+' del total', icon:'🚫', color:'var(--muted)' },
+    { label:'Tasa Cierre / Atendida', value:tasaAte+'%', sub:`${ventas} ventas / ${realizadas.length} atendidas`, icon:'🏆', color:'var(--green)' },
+    { label:'Tasa Cierre / Cualificada', value:tasaAge+'%', sub:`${ventas} ventas / ${cualif.length} cualificadas`, icon:'📈', color:'var(--accent)' },
+    { label:'Duración Media', value:durMedia+' min', sub:'Por llamada analizada', icon:'⏱️', color:'var(--purple)' },
+  ];
+
+  document.getElementById('kpi-pipeline').innerHTML = kpis.map(k=>`
+    <div class="kpi">
+      <div class="kpi-header">
+        <div class="kpi-label">${k.label}</div>
+        <div class="kpi-icon" style="background:${k.color}18">${k.icon}</div>
+      </div>
+      <div class="kpi-value">${k.raw ? k.value : k.value}</div>
+      <div class="kpi-sub">${k.sub}</div>
+    </div>`).join('');
+}
+
+function renderChartEstadosEv() {
+  const c=counter(F.eventos,'estado');
+  const order=['Realizada','En curso','Cancelada','No show lead','No show closer'];
+  const data=order.filter(k=>c[k]).map(k=>({label:k,val:c[k]}));
+  donut('chart-estados-ev',data);
+}
+
+function renderChartShow() {
+  const ev=F.eventos;
+  const show=ev.filter(r=>r.estado&&r.estado!=='No show lead').length;
+  const noShow=ev.filter(r=>r.estado==='No show lead').length;
+  donut('chart-show',[
+    {label:'Show (asiste)',val:show},
+    {label:'No Show',val:noShow}
+  ]);
+}
+
+function renderChartTriaje() {
+  // Triaje = eventos with "triaje" in tipo, Venta = rest or "venta"
+  const ev = F.eventos;
+  const triaje = ev.filter(r=>(r.tipo||'').toLowerCase().includes('triaje')).length;
+  const venta  = ev.filter(r=>(r.tipo||'').toLowerCase().includes('venta')).length;
+  const other  = ev.length - triaje - venta;
+  const data = [{label:'Triaje',val:triaje},{label:'Venta',val:venta}];
+  if (other > 0) data.push({label:'Otros',val:other});
+  donut('chart-triaje', data);
+}
+
+function renderTrendDay() {
+  const ev = F.eventos;
+  const byDay = {};
+  ev.forEach(r => {
+    const d = parseDate(r.fecha_llamada);
+    if (!d) return;
+    const key = d.toISOString().slice(0,10);
+    byDay[key] = (byDay[key]||0)+1;
+  });
+  const sorted = Object.entries(byDay).sort((a,b)=>a[0].localeCompare(b[0]));
+  if (!sorted.length) return;
+  const labels = sorted.map(([k])=>k.slice(5)); // MM-DD
+  const vals   = sorted.map(([,v])=>v);
+  getOrCreateChart('canvas-trend-day', {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [{ label:'Eventos', data:vals, borderColor:'#1a56db', backgroundColor:'rgba(26,86,219,0.08)', fill:true, tension:0.35, pointRadius:3, pointBackgroundColor:'#1a56db' }]
+    },
+    options: { responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false}}, scales:{y:{beginAtZero:true,ticks:{stepSize:1}}} }
+  });
+}
+
+function renderNoShowsDetail() {
+  const ev = F.eventos;
+  const noShowLead   = ev.filter(r=>r.estado==='No show lead').length;
+  const noShowCloser = ev.filter(r=>r.estado==='No show closer').length;
+  const noShowCloserPct = ev.length ? (noShowCloser/ev.length*100) : 0;
+  const alertClass = noShowCloserPct > 10 ? ' style="color:var(--red);font-weight:700"' : '';
+
+  const data = [
+    {label:'No Show Lead',val:noShowLead, extra:`${noShowLead} (${pct(noShowLead,ev.length)})`},
+    {label:'No Show Closer',val:noShowCloser, extra:`${noShowCloser} (${pct(noShowCloser,ev.length)})`},
+  ];
+
+  const max = Math.max(noShowLead,noShowCloser,1);
+  let html = `<div class="bar-list">`;
+  data.forEach((d,i) => {
+    const isCloserAlert = d.label==='No Show Closer' && noShowCloserPct > 10;
+    html += `<div class="bar-row">
+      <div class="bar-name" title="${d.label}">${d.label}</div>
+      <div class="bar-track"><div class="bar-fill" style="width:${(d.val/max*100).toFixed(1)}%;background:${isCloserAlert?'var(--red)':PAL[i%PAL.length]}"></div></div>
+      <div class="bar-num"${isCloserAlert?' style="color:var(--red);font-weight:700"':''}>${isCloserAlert?'⚠️ ':''}${d.extra}</div>
+    </div>`;
+  });
+  html += `</div>`;
+  document.getElementById('chart-noshows').innerHTML = html;
+}
+
+
+// ═══════════════════════════════════════════════════════════════
 // INIT
+// ═══════════════════════════════════════════════════════════════
 loadData();
 </script>
 </body>
