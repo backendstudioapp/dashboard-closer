@@ -557,15 +557,9 @@ main { padding: 24px 28px; max-width: 1600px; margin: 0 auto; }
 
   <!-- ═══════ TAB 3 — Análisis de Llamadas ═══════ -->
   <div class="tab-panel" id="tab-calls">
-    <div class="grid-2">
-      <div class="card">
-        <div class="card-title">Tipos de Objeción <span class="card-title-sub">(tipo 1 + 2 + 3)</span></div>
-        <div id="chart-tipos-objecion"></div>
-      </div>
-      <div class="card">
-        <div class="card-title">Gestión por Tipo de Objeción <span class="card-title-sub">(calidad de gestión)</span></div>
-        <div class="chart-canvas-wrap"><canvas id="canvas-gestion-tipo"></canvas></div>
-      </div>
+    <div class="card">
+      <div class="card-title">Tipos de Objeción <span class="card-title-sub">(tipo 1 + 2 + 3)</span></div>
+      <div id="chart-tipos-objecion"></div>
     </div>
     <div class="grid-2">
       <div class="card">
@@ -1201,7 +1195,6 @@ function renderResponsabilidad() {
 // ═══════════════════════════════════════════════════════════════
 function renderCalls() {
   renderTiposObjecion();
-  renderGestionPorTipo();
   renderHistogram();
   renderScores();
 }
@@ -1220,60 +1213,7 @@ function renderTiposObjecion() {
   barChart('chart-tipos-objecion',data);
 }
 
-function renderGestionPorTipo() {
-  // Cross-reference: for each objection type, count how many were managed Baja / Media / Alta
-  // We pair each objecion_tipo_N with the row's objecion_bien_gestionada
-  const tipos = {}; // { tipo: { Baja:0, Media:0, Alta:0 } }
-  F.informes.forEach(r => {
-    const gestion = (r.objecion_bien_gestionada || '').trim();
-    if (!gestion || gestion === '—') return;
-    ['objecion_tipo_1','objecion_tipo_2','objecion_tipo_3'].forEach(key => {
-      const tipo = (r[key] || '').trim();
-      if (!tipo || tipo === '—') return;
-      if (!tipos[tipo]) tipos[tipo] = {};
-      tipos[tipo][gestion] = (tipos[tipo][gestion] || 0) + 1;
-    });
-  });
 
-  const labels = Object.keys(tipos).sort((a,b) => {
-    const sumA = Object.values(tipos[a]).reduce((s,v)=>s+v,0);
-    const sumB = Object.values(tipos[b]).reduce((s,v)=>s+v,0);
-    return sumB - sumA;
-  });
-
-  if (!labels.length) {
-    // fallback: clear canvas
-    const cv = document.getElementById('canvas-gestion-tipo');
-    if (cv) { const ctx = cv.getContext('2d'); ctx.clearRect(0,0,cv.width,cv.height); }
-    return;
-  }
-
-  // Collect all unique gestion levels across all tipos
-  const allGestion = [...new Set(Object.values(tipos).flatMap(obj => Object.keys(obj)))].sort();
-  const gestionColors = { 'Baja':'#c81e1e', 'Media':'#b45309', 'Alta':'#057a55', 'Sí':'#057a55', 'No':'#c81e1e', 'Parcialmente':'#b45309' };
-  const fallbackColors = ['#1a56db','#5521b5','#0694a2','#9b1c1c','#7e3af2'];
-
-  const datasets = allGestion.map((g, i) => ({
-    label: g,
-    data: labels.map(t => tipos[t][g] || 0),
-    backgroundColor: gestionColors[g] || fallbackColors[i % fallbackColors.length],
-    borderRadius: 3,
-  }));
-
-  getOrCreateChart('canvas-gestion-tipo', {
-    type: 'bar',
-    data: { labels, datasets },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      plugins: { legend: { position: 'bottom', labels: { font: { size: 11 } } } },
-      scales: {
-        x: { stacked: true, ticks: { font: { size: 11 } } },
-        y: { stacked: true, beginAtZero: true, ticks: { stepSize: 1 } }
-      }
-    }
-  });
-}
 
 function renderHistogram() {
   const inf = F.informes;
